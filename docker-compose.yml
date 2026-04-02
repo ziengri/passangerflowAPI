@@ -1,0 +1,32 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment:
+      DATABASE_URL: sqlite:////app/data/app.db
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/app/data
+
+  demo:
+    build:
+      context: .
+      dockerfile: Dockerfile.demo
+    environment:
+      API_URL: http://api:8000
+      DEMO_BUS: BUS-DEMO
+      DEMO_CAM_MODE: random
+      DEMO_CAM: "1,2,3"
+      DEMO_INTERVAL_SECONDS: "120"
+      DEMO_BUS_CAMERA_COUNT: "4"
+      DEMO_TIMEOUT_SECONDS: "10"
+    depends_on:
+      - api
+    volumes:
+      - sqlite_data:/app/data
+
+volumes:
+  sqlite_data:
+
