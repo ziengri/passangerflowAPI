@@ -50,6 +50,13 @@ project/
 docker compose up --build
 ```
 
+If Docker Hub rate limits are hit, override base image registry:
+
+```bash
+set PYTHON_BASE_IMAGE=public.ecr.aws/docker/library/python:3.12-slim
+docker compose up --build
+```
+
 API will be available at:
 
 - `http://localhost:8000`

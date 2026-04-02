@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-public.ecr.aws/docker/library/python:3.12-slim}
     environment:
       DATABASE_URL: sqlite:////app/data/app.db
     ports:
@@ -14,6 +16,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.demo
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-public.ecr.aws/docker/library/python:3.12-slim}
     environment:
       API_URL: http://api:8000
       DEMO_BUS: BUS-DEMO
