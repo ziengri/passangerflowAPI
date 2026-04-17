@@ -7,7 +7,7 @@ services:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-mirror.gcr.io/library/python:3.12}
     environment:
       DATABASE_URL: sqlite:////app/data/app.db
-      API_AUTH_KEY: ${API_AUTH_KEY:-local-dev-key}
+      API_AUTH_KEY: "pcrt!af3g"
     ports:
       - "8000:8000"
     volumes:
