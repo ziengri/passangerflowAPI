@@ -72,6 +72,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Demo Service ENV
 
+- `API_AUTH_KEY` (default: `local-dev-key`) - required API key for `X-AUTH` header
 - `DEMO_BUS` (default: `BUS-DEMO`)
 - `DEMO_CAM_MODE` (`fixed` or `random`, default: `random`)
 - `DEMO_CAM` (default: `1`) - one camera (`1`) or CSV list (`1,2,3`)
@@ -94,10 +95,13 @@ Output date format in responses:
 
 ## API Examples (curl)
 
+All `/api/v1/*` requests require header: `X-AUTH: <API_AUTH_KEY>`.
+
 Create bus:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/buses \
+  -H "X-AUTH: local-dev-key" \
   -F "bus=BUS-001" \
   -F "cameraCount=4"
 ```
@@ -105,13 +109,14 @@ curl -X POST http://localhost:8000/api/v1/buses \
 Get buses:
 
 ```bash
-curl http://localhost:8000/api/v1/buses
+curl -H "X-AUTH: local-dev-key" http://localhost:8000/api/v1/buses
 ```
 
 Create timeline event:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/timeline \
+  -H "X-AUTH: local-dev-key" \
   -F "bus=BUS-001" \
   -F "cam=2" \
   -F "date=19.05.2026T19:30" \
@@ -123,6 +128,7 @@ Get passengers timeline for period:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/passengers \
+  -H "X-AUTH: local-dev-key" \
   -F "bus=BUS-001" \
   -F "cam=2" \
   -F "dateFrom=19.05.2026T19:00" \
@@ -132,7 +138,8 @@ curl -X POST http://localhost:8000/api/v1/passengers \
 Delete bus:
 
 ```bash
-curl -X DELETE http://localhost:8000/api/v1/buses/BUS-001
+curl -X DELETE http://localhost:8000/api/v1/buses/BUS-001 \
+  -H "X-AUTH: local-dev-key"
 ```
 
 ## Tests

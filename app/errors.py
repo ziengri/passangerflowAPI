@@ -23,3 +23,8 @@ class NotFoundError(AppHTTPError):
 class ConflictError(AppHTTPError):
     def __init__(self, detail: str) -> None:
         super().__init__(detail=detail, status_code=status.HTTP_409_CONFLICT)
+
+
+class UnauthorizedError(AppHTTPError):
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail=detail, status_code=status.HTTP_401_UNAUTHORIZED)

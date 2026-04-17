@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import os
 from pathlib import Path
 import sys
 
@@ -12,6 +13,8 @@ from sqlalchemy.orm import Session, sessionmaker
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+os.environ["API_AUTH_KEY"] = "test-api-key"
 
 from app.db import get_db
 from app.main import app

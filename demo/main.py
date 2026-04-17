@@ -22,6 +22,7 @@ logger = logging.getLogger("demo-service")
 @dataclass(frozen=True)
 class DemoConfig:
     api_url: str
+    api_auth_key: str
     bus: str
     cam_mode: str
     cam_values: list[int]
@@ -32,6 +33,7 @@ class DemoConfig:
     @classmethod
     def from_env(cls) -> "DemoConfig":
         api_url = os.getenv("API_URL", "http://api:8000").rstrip("/")
+        api_auth_key = os.getenv("API_AUTH_KEY", "local-dev-key")
         bus = os.getenv("DEMO_BUS", "BUS-DEMO").strip() or "BUS-DEMO"
 
         cam_mode = os.getenv("DEMO_CAM_MODE", "random").strip().lower()
@@ -46,6 +48,7 @@ class DemoConfig:
 
         return cls(
             api_url=api_url,
+            api_auth_key=api_auth_key,
             bus=bus,
             cam_mode=cam_mode,
             cam_values=cam_values,
@@ -106,10 +109,11 @@ def _read_camera_list(env_name: str, default: list[int]) -> list[int]:
 
 
 class ApiClient:
-    def __init__(self, api_url: str, timeout_seconds: int) -> None:
+    def __init__(self, api_url: str, timeout_seconds: int, api_auth_key: str) -> None:
         self.api_url = api_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.session = requests.Session()
+        self.session.headers.update({"X-AUTH": api_auth_key})
 
     def _url(self, path: str) -> str:
         return f"{self.api_url}{path}"
@@ -268,7 +272,11 @@ def run_demo_loop(config: DemoConfig, client: ApiClient) -> None:
 
 def main() -> None:
     config = DemoConfig.from_env()
-    client = ApiClient(api_url=config.api_url, timeout_seconds=config.timeout_seconds)
+    client = ApiClient(
+        api_url=config.api_url,
+        timeout_seconds=config.timeout_seconds,
+        api_auth_key=config.api_auth_key,
+    )
     run_demo_loop(config=config, client=client)
 
 

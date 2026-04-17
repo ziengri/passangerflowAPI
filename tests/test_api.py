@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+AUTH_HEADERS = {"X-AUTH": "test-api-key"}
+
 
 def create_bus(client: TestClient, bus: str, camera_count: int):
     return client.post(
         "/api/v1/buses",
         data={"bus": bus, "cameraCount": camera_count},
+        headers=AUTH_HEADERS,
     )
 
 
@@ -27,6 +30,7 @@ def create_timeline(
             "in": in_count,
             "out": out_count,
         },
+        headers=AUTH_HEADERS,
     )
 
 
@@ -39,7 +43,7 @@ def test_create_bus_and_list_buses(client: TestClient) -> None:
         "cameraCount": 4,
     }
 
-    list_response = client.get("/api/v1/buses")
+    list_response = client.get("/api/v1/buses", headers=AUTH_HEADERS)
     assert list_response.status_code == 200
     assert list_response.json() == [{"bus": "BUS-001", "cameras": [1, 2, 3, 4]}]
 
@@ -96,6 +100,7 @@ def test_passengers_period_response_and_sum(client: TestClient) -> None:
             "dateFrom": "19.05.2026T19:30",
             "dateTo": "19.05.2026T19:32",
         },
+        headers=AUTH_HEADERS,
     )
 
     assert response.status_code == 200
@@ -115,6 +120,7 @@ def test_passengers_period_response_and_sum(client: TestClient) -> None:
             "dateFrom": "19.05.2026T19:32",
             "dateTo": "19.05.2026T19:30",
         },
+        headers=AUTH_HEADERS,
     )
     assert invalid_period.status_code == 400
 
@@ -123,11 +129,11 @@ def test_delete_bus_cascades_timeline(client: TestClient) -> None:
     assert create_bus(client, "BUS-001", 1).status_code == 201
     assert create_timeline(client, "BUS-001", 1, "19.05.2026T19:30", 4, 2).status_code == 201
 
-    delete_response = client.delete("/api/v1/buses/BUS-001")
+    delete_response = client.delete("/api/v1/buses/BUS-001", headers=AUTH_HEADERS)
     assert delete_response.status_code == 200
     assert delete_response.json() == {"status": "ok", "bus": "BUS-001"}
 
-    list_response = client.get("/api/v1/buses")
+    list_response = client.get("/api/v1/buses", headers=AUTH_HEADERS)
     assert list_response.status_code == 200
     assert list_response.json() == []
 
@@ -139,5 +145,11 @@ def test_delete_bus_cascades_timeline(client: TestClient) -> None:
             "dateFrom": "19.05.2026T19:00",
             "dateTo": "19.05.2026T20:00",
         },
+        headers=AUTH_HEADERS,
     )
     assert passengers_after_delete.status_code == 404
+
+
+def test_missing_auth_header_returns_401(client: TestClient) -> None:
+    response = client.get("/api/v1/buses")
+    assert response.status_code == 401

@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from app.auth import verify_api_key
 from app.db import init_db
 from app.errors import AppHTTPError
 from app.routes import buses, passengers, timeline
@@ -48,6 +49,6 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-app.include_router(buses.router)
-app.include_router(timeline.router)
-app.include_router(passengers.router)
+app.include_router(buses.router, dependencies=[Depends(verify_api_key)])
+app.include_router(timeline.router, dependencies=[Depends(verify_api_key)])
+app.include_router(passengers.router, dependencies=[Depends(verify_api_key)])
