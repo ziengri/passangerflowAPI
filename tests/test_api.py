@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from fastapi.testclient import TestClient
 
 AUTH_HEADERS = {"X-AUTH": "test-api-key"}
@@ -153,3 +155,18 @@ def test_delete_bus_cascades_timeline(client: TestClient) -> None:
 def test_missing_auth_header_returns_401(client: TestClient) -> None:
     response = client.get("/api/v1/buses")
     assert response.status_code == 401
+
+
+def test_dev_mode_skips_auth_check(client: TestClient) -> None:
+    previous_value = os.environ.get("API_DEV_MODE")
+    os.environ["API_DEV_MODE"] = "true"
+
+    try:
+        response = client.get("/api/v1/buses")
+        assert response.status_code == 200
+        assert response.json() == []
+    finally:
+        if previous_value is None:
+            os.environ.pop("API_DEV_MODE", None)
+        else:
+            os.environ["API_DEV_MODE"] = previous_value

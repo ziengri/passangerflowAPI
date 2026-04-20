@@ -72,6 +72,7 @@ uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ## Demo Service ENV
 
+- `API_DEV_MODE` (default: `false`) - if enabled (`true`, `1`, `yes`, `on`), API skips `X-AUTH` validation
 - `API_AUTH_KEY` (default: `local-dev-key`) - required API key for `X-AUTH` header
 - `DEMO_BUS` (default: `BUS-DEMO`)
 - `DEMO_CAM_MODE` (`fixed` or `random`, default: `random`)
@@ -96,6 +97,7 @@ Output date format in responses:
 ## API Examples (curl)
 
 All `/api/v1/*` requests require header: `X-AUTH: <API_AUTH_KEY>`.
+If `API_DEV_MODE=true`, authorization is disabled for API routes.
 
 Create bus:
 
@@ -148,4 +150,3 @@ curl -X DELETE http://localhost:8000/api/v1/buses/BUS-001 \
 uv sync --group dev
 uv run pytest
 ```
-
