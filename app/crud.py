@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Bus, PassengerTimeline
+from app.models import Bus, DeviceCurrentStatus, DeviceEvent, PassengerTimeline
+from app.utils.iso_datetime import format_iso8601_utc_output
+
+DEFAULT_MONITORING_CAMERA_COUNT = 3
 
 
 def _normalize_bus_number(bus_number: str) -> str:
@@ -22,6 +26,13 @@ def _validate_non_negative(field_name: str, value: int) -> None:
         raise BadRequestError(f"`{field_name}` must be >= 0.")
 
 
+def _normalize_non_empty_text(field_name: str, value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise BadRequestError(f"`{field_name}` must be a non-empty string.")
+    return cleaned
+
+
 def _ensure_camera_exists(bus: Bus, camera_number: int) -> None:
     if camera_number < 1 or camera_number > bus.camera_count:
         raise NotFoundError("Camera not found for this bus.")
@@ -30,6 +41,25 @@ def _ensure_camera_exists(bus: Bus, camera_number: int) -> None:
 def _get_bus_by_number(db: Session, bus_number: str) -> Bus | None:
     statement = select(Bus).where(Bus.bus_number == bus_number)
     return db.scalar(statement)
+
+
+def _get_device_current_status_by_bus(db: Session, bus_number: str) -> DeviceCurrentStatus | None:
+    statement = select(DeviceCurrentStatus).where(DeviceCurrentStatus.bus_number == bus_number)
+    return db.scalar(statement)
+
+
+def _extract_camera_id(camera_payload: dict[str, Any]) -> int | None:
+    raw_camera_id = camera_payload.get("cameraId")
+    if isinstance(raw_camera_id, bool):
+        return None
+    if isinstance(raw_camera_id, int):
+        return raw_camera_id if raw_camera_id > 0 else None
+    if isinstance(raw_camera_id, str):
+        cleaned = raw_camera_id.strip()
+        if cleaned.isdigit():
+            camera_id = int(cleaned)
+            return camera_id if camera_id > 0 else None
+    return None
 
 
 def get_bus_or_404(db: Session, bus_number: str) -> Bus:
@@ -104,6 +134,198 @@ def create_timeline_entry(
 
     db.refresh(timeline_entry)
     return timeline_entry
+
+
+def infer_monitoring_camera_count(cameras: list[dict[str, Any]]) -> int:
+    camera_ids = [_extract_camera_id(camera) for camera in cameras]
+    inferred_from_ids = max((camera_id for camera_id in camera_ids if camera_id is not None), default=0)
+    return max(DEFAULT_MONITORING_CAMERA_COUNT, len(cameras), inferred_from_ids)
+
+
+def ensure_bus_exists_for_monitoring(
+    db: Session,
+    bus_number: str,
+    inferred_camera_count: int,
+) -> Bus:
+    normalized = _normalize_bus_number(bus_number)
+    target_camera_count = max(DEFAULT_MONITORING_CAMERA_COUNT, inferred_camera_count)
+
+    bus = _get_bus_by_number(db, normalized)
+    if bus is None:
+        bus = Bus(bus_number=normalized, camera_count=target_camera_count)
+        db.add(bus)
+        return bus
+
+    if target_camera_count > bus.camera_count:
+        bus.camera_count = target_camera_count
+
+    return bus
+
+
+def upsert_current_status(
+    db: Session,
+    bus_number: str,
+    reported_at: datetime,
+    snapshot: dict[str, Any],
+    inferred_camera_count: int,
+) -> tuple[DeviceCurrentStatus, bool]:
+    normalized = _normalize_bus_number(bus_number)
+    ensure_bus_exists_for_monitoring(db, normalized, inferred_camera_count)
+
+    current_status = _get_device_current_status_by_bus(db, normalized)
+    applied = True
+
+    if current_status is None:
+        current_status = DeviceCurrentStatus(
+            bus_number=normalized,
+            reported_at=reported_at,
+            snapshot_json=snapshot,
+            updated_at=datetime.utcnow(),
+        )
+        db.add(current_status)
+    elif reported_at >= current_status.reported_at:
+        current_status.reported_at = reported_at
+        current_status.snapshot_json = snapshot
+        current_status.updated_at = datetime.utcnow()
+    else:
+        applied = False
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BadRequestError("Failed to upsert device status.") from exc
+
+    if applied:
+        db.refresh(current_status)
+
+    return current_status, applied
+
+
+def list_device_current_statuses(db: Session) -> list[DeviceCurrentStatus]:
+    statement = select(DeviceCurrentStatus).order_by(DeviceCurrentStatus.bus_number.asc())
+    return list(db.scalars(statement))
+
+
+def get_device_current_status_or_404(db: Session, bus_number: str) -> DeviceCurrentStatus:
+    normalized = _normalize_bus_number(bus_number)
+    current_status = _get_device_current_status_by_bus(db, normalized)
+    if current_status is None:
+        raise NotFoundError("Device status not found.")
+    return current_status
+
+
+def serialize_device_current_status(current_status: DeviceCurrentStatus) -> dict[str, Any]:
+    snapshot = dict(current_status.snapshot_json)
+    snapshot["bus"] = current_status.bus_number
+    snapshot["reportedAt"] = format_iso8601_utc_output(current_status.reported_at)
+    snapshot.setdefault("cameras", [])
+    snapshot.setdefault("services", [])
+    return snapshot
+
+
+def insert_events_batch(
+    db: Session,
+    bus_number: str,
+    events: list[dict[str, Any]],
+    inferred_camera_count: int = DEFAULT_MONITORING_CAMERA_COUNT,
+) -> tuple[int, int]:
+    normalized = _normalize_bus_number(bus_number)
+    ensure_bus_exists_for_monitoring(db, normalized, inferred_camera_count)
+
+    unique_events: list[dict[str, Any]] = []
+    seen_event_ids: set[str] = set()
+    duplicates = 0
+
+    for event in events:
+        event_id = _normalize_non_empty_text("eventId", str(event["event_id"]))
+        if event_id in seen_event_ids:
+            duplicates += 1
+            continue
+
+        seen_event_ids.add(event_id)
+        unique_events.append(
+            {
+                "event_id": event_id,
+                "occurred_at": event["occurred_at"],
+                "kind": _normalize_non_empty_text("kind", str(event["kind"])),
+                "component": _normalize_non_empty_text("component", str(event["component"])),
+                "severity": _normalize_non_empty_text("severity", str(event["severity"])),
+                "message": _normalize_non_empty_text("message", str(event["message"])),
+                "details": event.get("details"),
+            }
+        )
+
+    existing_event_ids: set[str] = set()
+    if unique_events:
+        statement = select(DeviceEvent.event_id).where(
+            DeviceEvent.bus_number == normalized,
+            DeviceEvent.event_id.in_([event["event_id"] for event in unique_events]),
+        )
+        existing_event_ids = set(db.scalars(statement))
+
+    rows_to_insert = [
+        DeviceEvent(
+            bus_number=normalized,
+            event_id=event["event_id"],
+            occurred_at=event["occurred_at"],
+            kind=event["kind"],
+            component=event["component"],
+            severity=event["severity"],
+            message=event["message"],
+            details_json=event["details"],
+        )
+        for event in unique_events
+        if event["event_id"] not in existing_event_ids
+    ]
+    duplicates += len(unique_events) - len(rows_to_insert)
+
+    if rows_to_insert:
+        db.add_all(rows_to_insert)
+
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise BadRequestError("Failed to store device events.") from exc
+
+    return len(rows_to_insert), duplicates
+
+
+def list_device_events(
+    db: Session,
+    bus_number: str | None = None,
+    occurred_from: datetime | None = None,
+    occurred_to: datetime | None = None,
+    kind: str | None = None,
+    limit: int = 100,
+) -> list[DeviceEvent]:
+    statement = select(DeviceEvent)
+
+    if bus_number is not None:
+        statement = statement.where(DeviceEvent.bus_number == _normalize_bus_number(bus_number))
+    if occurred_from is not None:
+        statement = statement.where(DeviceEvent.occurred_at >= occurred_from)
+    if occurred_to is not None:
+        statement = statement.where(DeviceEvent.occurred_at <= occurred_to)
+    if kind is not None:
+        statement = statement.where(DeviceEvent.kind == _normalize_non_empty_text("kind", kind))
+
+    statement = statement.order_by(DeviceEvent.occurred_at.desc(), DeviceEvent.id.desc()).limit(limit)
+    return list(db.scalars(statement))
+
+
+def serialize_device_event(event: DeviceEvent) -> dict[str, Any]:
+    return {
+        "bus": event.bus_number,
+        "eventId": event.event_id,
+        "occurredAt": format_iso8601_utc_output(event.occurred_at),
+        "kind": event.kind,
+        "component": event.component,
+        "severity": event.severity,
+        "message": event.message,
+        "details": event.details_json,
+    }
 
 
 def get_passengers_for_period(

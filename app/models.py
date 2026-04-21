@@ -2,7 +2,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -59,3 +69,45 @@ class PassengerTimeline(Base):
     )
 
     bus: Mapped[Bus] = relationship(back_populates="timeline_entries")
+
+
+class DeviceCurrentStatus(Base):
+    __tablename__ = "device_current_status"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bus_number: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    snapshot_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+
+
+class DeviceEvent(Base):
+    __tablename__ = "device_events"
+    __table_args__ = (
+        UniqueConstraint("bus_number", "event_id", name="uq_device_events_bus_event_id"),
+        Index("ix_device_events_bus_occurred_at", "bus_number", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bus_number: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    event_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=False), nullable=False)
+    kind: Mapped[str] = mapped_column(String(128), nullable=False)
+    component: Mapped[str] = mapped_column(String(128), nullable=False)
+    severity: Mapped[str] = mapped_column(String(32), nullable=False)
+    message: Mapped[str] = mapped_column(String(1024), nullable=False)
+    details_json: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )

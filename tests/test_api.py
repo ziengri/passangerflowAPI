@@ -36,6 +36,80 @@ def create_timeline(
     )
 
 
+def post_device_status(client: TestClient, payload: dict):
+    return client.post(
+        "/api/v1/device-status",
+        json=payload,
+        headers=AUTH_HEADERS,
+    )
+
+
+def post_device_events(client: TestClient, payload: dict):
+    return client.post(
+        "/api/v1/device-events/batch",
+        json=payload,
+        headers=AUTH_HEADERS,
+    )
+
+
+def build_device_status_payload(bus: str, reported_at: str, camera_count: int) -> dict:
+    return {
+        "bus": bus,
+        "reportedAt": reported_at,
+        "connectivity": {
+            "apiReachable": True,
+            "apiLastOnlineAt": reported_at,
+        },
+        "cameras": [
+            {
+                "cameraId": camera_number,
+                "ip": f"192.168.0.{camera_number + 2}",
+                "reachable": True,
+            }
+            for camera_number in range(1, camera_count + 1)
+        ],
+        "services": [
+            {
+                "name": "buspcrt-processor.service",
+                "status": "active",
+            },
+            {
+                "name": "buspcrt-door-gateway.service",
+                "status": "active",
+            },
+        ],
+        "storage": {
+            "sessionsDirBytes": 2048,
+            "freeBytes": 4096,
+        },
+        "buffers": {
+            "monitorPendingEvents": 1,
+            "monitorPendingStatus": 0,
+            "timelinePendingRecords": 2,
+        },
+    }
+
+
+def build_device_event_payload(
+    event_id: str,
+    occurred_at: str,
+    kind: str,
+    component: str,
+    severity: str,
+    message: str,
+    details: dict | None = None,
+) -> dict:
+    return {
+        "eventId": event_id,
+        "occurredAt": occurred_at,
+        "kind": kind,
+        "component": component,
+        "severity": severity,
+        "message": message,
+        "details": details,
+    }
+
+
 def test_create_bus_and_list_buses(client: TestClient) -> None:
     create_response = create_bus(client, "BUS-001", 4)
     assert create_response.status_code == 201
@@ -150,6 +224,198 @@ def test_delete_bus_cascades_timeline(client: TestClient) -> None:
         headers=AUTH_HEADERS,
     )
     assert passengers_after_delete.status_code == 404
+
+
+def test_device_status_upsert_autocreates_bus_and_rejects_stale_snapshot(client: TestClient) -> None:
+    latest_payload = build_device_status_payload(
+        "BUS-MON-001",
+        "2026-05-19T22:30:00+03:00",
+        camera_count=4,
+    )
+
+    create_response = post_device_status(client, latest_payload)
+    assert create_response.status_code == 200
+    assert create_response.json() == {
+        "status": "ok",
+        "bus": "BUS-MON-001",
+        "reportedAt": "2026-05-19T19:30:00Z",
+        "applied": True,
+    }
+
+    stale_payload = build_device_status_payload(
+        "BUS-MON-001",
+        "2026-05-19T19:29:00Z",
+        camera_count=2,
+    )
+    stale_response = post_device_status(client, stale_payload)
+    assert stale_response.status_code == 200
+    assert stale_response.json() == {
+        "status": "ok",
+        "bus": "BUS-MON-001",
+        "reportedAt": "2026-05-19T19:29:00Z",
+        "applied": False,
+    }
+
+    current_status_response = client.get("/api/v1/device-status/BUS-MON-001", headers=AUTH_HEADERS)
+    assert current_status_response.status_code == 200
+    expected_snapshot = dict(latest_payload)
+    expected_snapshot["reportedAt"] = "2026-05-19T19:30:00Z"
+    assert current_status_response.json() == expected_snapshot
+
+    list_status_response = client.get("/api/v1/device-status", headers=AUTH_HEADERS)
+    assert list_status_response.status_code == 200
+    assert list_status_response.json() == [expected_snapshot]
+
+    list_buses_response = client.get("/api/v1/buses", headers=AUTH_HEADERS)
+    assert list_buses_response.status_code == 200
+    assert list_buses_response.json() == [{"bus": "BUS-MON-001", "cameras": [1, 2, 3, 4]}]
+
+    missing_status_response = client.get("/api/v1/device-status/BUS-404", headers=AUTH_HEADERS)
+    assert missing_status_response.status_code == 404
+
+
+def test_device_events_batch_deduplicates_and_filters(client: TestClient) -> None:
+    empty_batch_response = post_device_events(client, {"bus": "BUS-MON-EMPTY", "events": []})
+    assert empty_batch_response.status_code == 200
+    assert empty_batch_response.json() == {
+        "status": "ok",
+        "bus": "BUS-MON-EMPTY",
+        "received": 0,
+        "inserted": 0,
+        "duplicates": 0,
+    }
+
+    events_response = post_device_events(
+        client,
+        {
+            "bus": "BUS-MON-001",
+            "events": [
+                build_device_event_payload(
+                    "evt-1",
+                    "2026-05-19T19:30:00Z",
+                    "camera.status_changed",
+                    "camera-1",
+                    "warning",
+                    "Camera 1 is offline",
+                    {"reachable": False},
+                ),
+                build_device_event_payload(
+                    "evt-1",
+                    "2026-05-19T19:31:00Z",
+                    "camera.status_changed",
+                    "camera-1",
+                    "warning",
+                    "Camera 1 is still offline",
+                    {"reachable": False},
+                ),
+                build_device_event_payload(
+                    "evt-2",
+                    "2026-05-19T22:32:00+03:00",
+                    "service.status_changed",
+                    "buspcrt-processor.service",
+                    "critical",
+                    "Processor stopped",
+                    {"status": "failed"},
+                ),
+            ],
+        },
+    )
+    assert events_response.status_code == 200
+    assert events_response.json() == {
+        "status": "ok",
+        "bus": "BUS-MON-001",
+        "received": 3,
+        "inserted": 2,
+        "duplicates": 1,
+    }
+
+    second_bus_response = post_device_events(
+        client,
+        {
+            "bus": "BUS-MON-002",
+            "events": [
+                build_device_event_payload(
+                    "evt-1",
+                    "2026-05-19T19:34:00Z",
+                    "camera.status_changed",
+                    "camera-2",
+                    "warning",
+                    "Camera 2 is offline",
+                    {"reachable": False},
+                )
+            ],
+        },
+    )
+    assert second_bus_response.status_code == 200
+    assert second_bus_response.json() == {
+        "status": "ok",
+        "bus": "BUS-MON-002",
+        "received": 1,
+        "inserted": 1,
+        "duplicates": 0,
+    }
+
+    filtered_events_response = client.get(
+        "/api/v1/device-events",
+        params={
+            "bus": "BUS-MON-001",
+            "kind": "camera.status_changed",
+            "from": "2026-05-19T19:00:00Z",
+            "to": "2026-05-19T20:00:00Z",
+            "limit": 10,
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert filtered_events_response.status_code == 200
+    assert filtered_events_response.json() == [
+        {
+            "bus": "BUS-MON-001",
+            "eventId": "evt-1",
+            "occurredAt": "2026-05-19T19:30:00Z",
+            "kind": "camera.status_changed",
+            "component": "camera-1",
+            "severity": "warning",
+            "message": "Camera 1 is offline",
+            "details": {"reachable": False},
+        }
+    ]
+
+    latest_event_response = client.get(
+        "/api/v1/device-events",
+        params={"limit": 1},
+        headers=AUTH_HEADERS,
+    )
+    assert latest_event_response.status_code == 200
+    assert latest_event_response.json() == [
+        {
+            "bus": "BUS-MON-002",
+            "eventId": "evt-1",
+            "occurredAt": "2026-05-19T19:34:00Z",
+            "kind": "camera.status_changed",
+            "component": "camera-2",
+            "severity": "warning",
+            "message": "Camera 2 is offline",
+            "details": {"reachable": False},
+        }
+    ]
+
+    invalid_period_response = client.get(
+        "/api/v1/device-events",
+        params={
+            "from": "2026-05-19T20:00:00Z",
+            "to": "2026-05-19T19:00:00Z",
+        },
+        headers=AUTH_HEADERS,
+    )
+    assert invalid_period_response.status_code == 400
+
+    list_buses_response = client.get("/api/v1/buses", headers=AUTH_HEADERS)
+    assert list_buses_response.status_code == 200
+    assert list_buses_response.json() == [
+        {"bus": "BUS-MON-001", "cameras": [1, 2, 3]},
+        {"bus": "BUS-MON-002", "cameras": [1, 2, 3]},
+        {"bus": "BUS-MON-EMPTY", "cameras": [1, 2, 3]},
+    ]
 
 
 def test_missing_auth_header_returns_401(client: TestClient) -> None:

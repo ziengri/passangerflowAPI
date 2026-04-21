@@ -25,9 +25,11 @@ project/
 в”‚  в”њв”Ђ errors.py
 в”‚  в”њв”Ђ routes/
 в”‚  в”‚  в”њв”Ђ buses.py
+в”‚  в”‚  в”њв”Ђ monitoring.py
 в”‚  в”‚  в”њв”Ђ passengers.py
 в”‚  в”‚  в””в”Ђ timeline.py
 в”‚  в””в”Ђ utils/
+в”‚     в”њв”Ђ iso_datetime.py
 в”‚     в””в”Ђ datetime_parser.py
 в”њв”Ђ demo/
 в”‚  в””в”Ђ main.py
@@ -94,6 +96,12 @@ Output date format in responses:
 - `YYYY-MM-DDTHH:MM:SS`
 - Example: `2026-05-19T19:30:00`
 
+Monitoring endpoints use ISO 8601 timestamps with timezone:
+
+- Accepted input example: `2026-05-19T19:30:00Z`
+- Accepted input example with offset: `2026-05-19T22:30:00+03:00`
+- Monitoring output format: UTC ISO 8601, example `2026-05-19T19:30:00Z`
+
 ## API Examples (curl)
 
 All `/api/v1/*` requests require header: `X-AUTH: <API_AUTH_KEY>`.
@@ -135,6 +143,70 @@ curl -X POST http://localhost:8000/api/v1/passengers \
   -F "cam=2" \
   -F "dateFrom=19.05.2026T19:00" \
   -F "dateTo=19.05.2026T20:00"
+```
+
+Upsert device status:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/device-status \
+  -H "X-AUTH: local-dev-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bus": "BUS-001",
+    "reportedAt": "2026-05-19T19:30:00Z",
+    "connectivity": {
+      "apiReachable": true
+    },
+    "cameras": [
+      {"cameraId": 1, "reachable": true},
+      {"cameraId": 2, "reachable": true},
+      {"cameraId": 3, "reachable": false}
+    ],
+    "services": [
+      {"name": "buspcrt-processor.service", "status": "active"}
+    ],
+    "storage": {
+      "freeBytes": 1048576
+    },
+    "buffers": {
+      "monitorPendingEvents": 2
+    }
+  }'
+```
+
+Send monitoring events batch:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/device-events/batch \
+  -H "X-AUTH: local-dev-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bus": "BUS-001",
+    "events": [
+      {
+        "eventId": "evt-1",
+        "occurredAt": "2026-05-19T19:31:00Z",
+        "kind": "camera.status_changed",
+        "component": "camera-1",
+        "severity": "warning",
+        "message": "Camera 1 is offline",
+        "details": {"reachable": false}
+      }
+    ]
+  }'
+```
+
+Get current device statuses:
+
+```bash
+curl -H "X-AUTH: local-dev-key" http://localhost:8000/api/v1/device-status
+```
+
+Get monitoring events:
+
+```bash
+curl -H "X-AUTH: local-dev-key" \
+  "http://localhost:8000/api/v1/device-events?bus=BUS-001&kind=camera.status_changed&limit=100"
 ```
 
 Delete bus:
