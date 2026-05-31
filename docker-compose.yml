@@ -1,19 +1,40 @@
 services:
+  timescaledb:
+    image: ${TIMESCALE_IMAGE:-timescale/timescaledb:latest-pg16}
+    container_name: timescaledb
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-j0lxEv0sljXa}
+      TIMESCALEDB_TELEMETRY: "off"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./timescaledb_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
   api:
     build:
       context: .
       dockerfile: Dockerfile.api
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-mirror.gcr.io/library/python:3.12}
+    depends_on:
+      timescaledb:
+        condition: service_healthy
     environment:
-      DATABASE_URL: sqlite:////app/data/app.db
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-j0lxEv0sljXa}@timescaledb:5432/${POSTGRES_DB:-app_db}
       API_AUTH_KEY: "pcrt!af3g"
       API_DEV_MODE: "true"
     restart: unless-stopped
     ports:
       - "8000:8000"
-    volumes:
-      - sqlite_data:/app/data
 
   # demo:
   #   build:
@@ -32,8 +53,3 @@ services:
   #     DEMO_TIMEOUT_SECONDS: "10"
   #   depends_on:
   #     - api
-  #   volumes:
-  #     - sqlite_data:/app/data
-
-volumes:
-  sqlite_data:

@@ -5,7 +5,9 @@ description = "Passenger flow accounting API and demo generator"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.16.0,<2.0.0",
   "fastapi>=0.115.0,<1.0.0",
+  "psycopg[binary]>=3.2.0,<4.0.0",
   "uvicorn>=0.30.0,<1.0.0",
   "sqlalchemy>=2.0.30,<3.0.0",
   "pydantic>=2.7.0,<3.0.0",

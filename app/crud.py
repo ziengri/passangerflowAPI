@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -180,13 +180,13 @@ def upsert_current_status(
             bus_number=normalized,
             reported_at=reported_at,
             snapshot_json=snapshot,
-            updated_at=datetime.utcnow(),
+            updated_at=datetime.now(timezone.utc),
         )
         db.add(current_status)
     elif reported_at >= current_status.reported_at:
         current_status.reported_at = reported_at
         current_status.snapshot_json = snapshot
-        current_status.updated_at = datetime.utcnow()
+        current_status.updated_at = datetime.now(timezone.utc)
     else:
         applied = False
 

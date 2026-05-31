@@ -7,7 +7,8 @@ API and demo generator for bus passenger flow accounting.
 - Python 3.12
 - FastAPI + Uvicorn
 - SQLAlchemy 2.x
-- SQLite
+- TimescaleDB/PostgreSQL
+- Alembic
 - Pydantic 2.x
 - uv
 - Docker + Docker Compose
@@ -67,9 +68,19 @@ API will be available at:
 
 ## Run Locally (uv)
 
+Local API startup expects a reachable TimescaleDB/PostgreSQL database and a PostgreSQL SQLAlchemy URL:
+
 ```bash
 uv sync
+set DATABASE_URL=postgresql+psycopg://app_user:j0lxEv0sljXa@localhost:5432/app_db
+uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+Legacy SQLite is supported only as an offline import source:
+
+```bash
+uv run python -m app.legacy_import --sqlite-path data/app.db --database-url %DATABASE_URL%
 ```
 
 ## Demo Service ENV

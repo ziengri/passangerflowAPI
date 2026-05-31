@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from app.errors import BadRequestError
+from app.utils.timezones import UTC
 
 
 def parse_iso8601_datetime(value: str, field_name: str) -> datetime:
@@ -24,8 +25,9 @@ def parse_iso8601_datetime(value: str, field_name: str) -> datetime:
             f"Invalid `{field_name}` format. Expected ISO 8601 timestamp with timezone."
         )
 
-    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed.astimezone(UTC)
 
 
 def format_iso8601_utc_output(value: datetime) -> str:
-    return value.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+    utc_value = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return utc_value.astimezone(UTC).isoformat().replace("+00:00", "Z")
