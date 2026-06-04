@@ -25,6 +25,12 @@ services:
       dockerfile: Dockerfile.api
       args:
         PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-mirror.gcr.io/library/python:3.12}
+        HTTP_PROXY: ${HTTP_PROXY}
+        HTTPS_PROXY: ${HTTPS_PROXY}
+        http_proxy: ${http_proxy}
+        https_proxy: ${https_proxy}
+        NO_PROXY: ${NO_PROXY}
+        no_proxy: ${no_proxy}
     depends_on:
       timescaledb:
         condition: service_healthy
