@@ -7,7 +7,7 @@ API and demo generator for bus passenger flow accounting.
 - Python 3.12
 - FastAPI + Uvicorn
 - SQLAlchemy 2.x
-- TimescaleDB/PostgreSQL
+- TimescaleDB/PostgreSQL + PostGIS
 - Alembic
 - Pydantic 2.x
 - uv

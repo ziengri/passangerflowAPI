@@ -128,6 +128,18 @@ def _create_legacy_sqlite_fixture(path: Path) -> None:
 
 def test_timescaledb_schema_is_applied(db_engine) -> None:
     with db_engine.connect() as connection:
+        extensions = {
+            row[0]
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT extname
+                    FROM pg_extension
+                    WHERE extname IN ('timescaledb', 'postgis')
+                    """
+                )
+            )
+        }
         hypertables = {
             row[0]: row[1]
             for row in connection.execute(
@@ -157,6 +169,7 @@ def test_timescaledb_schema_is_applied(db_engine) -> None:
         "device_events": True,
         "passenger_timeline": True,
     }
+    assert {"timescaledb", "postgis"} <= extensions
     assert {"device_events", "passenger_timeline"} <= compression_jobs
 
 
