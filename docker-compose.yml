@@ -42,6 +42,26 @@ services:
     ports:
       - "8000:8000"
 
+  gps-egts:
+    build:
+      context: .
+      dockerfile: gps/Dockerfile
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      GPS_DATABASE_DSN: postgres://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-j0lxEv0sljXa}@timescaledb:5432/${POSTGRES_DB:-app_db}?sslmode=disable
+      GPS_EGTS_HOST: 0.0.0.0
+      GPS_EGTS_PORT: 9000
+      GPS_EGTS_DISPATCHER_HOST: egts.gortransportnch.ru
+      GPS_HEALTH_HOST: 0.0.0.0
+      GPS_HEALTH_PORT: 8001
+      GPS_LOG_LEVEL: info
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "8001:8001"
+
   # demo:
   #   build:
   #     context: .

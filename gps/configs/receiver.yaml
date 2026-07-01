@@ -1,0 +1,16 @@
+server:
+  host: "0.0.0.0"
+  port: 9000
+  connection_live_seconds: 30
+  dispatcher_host: ""
+
+database:
+  dsn: "postgres://app_user:j0lxEv0sljXa@localhost:5432/app_db?sslmode=disable"
+  max_connections: 10
+
+logging:
+  level: "info"
+
+health:
+  host: "0.0.0.0"
+  port: 8001

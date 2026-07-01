@@ -147,7 +147,7 @@ def test_timescaledb_schema_is_applied(db_engine) -> None:
                     """
                     SELECT hypertable_name, compression_enabled
                     FROM timescaledb_information.hypertables
-                    WHERE hypertable_name IN ('passenger_timeline', 'device_events')
+                    WHERE hypertable_name IN ('passenger_timeline', 'device_events', 'gps_timeline')
                     """
                 )
             )
@@ -164,13 +164,27 @@ def test_timescaledb_schema_is_applied(db_engine) -> None:
                 )
             )
         }
+        retention_jobs = {
+            row[0]
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT hypertable_name
+                    FROM timescaledb_information.jobs
+                    WHERE proc_name = 'policy_retention'
+                    """
+                )
+            )
+        }
 
     assert hypertables == {
         "device_events": True,
+        "gps_timeline": True,
         "passenger_timeline": True,
     }
     assert {"timescaledb", "postgis"} <= extensions
-    assert {"device_events", "passenger_timeline"} <= compression_jobs
+    assert {"device_events", "gps_timeline", "passenger_timeline"} <= compression_jobs
+    assert {"gps_timeline"} <= retention_jobs
 
 
 def test_passenger_timeline_is_stored_in_utc(client, db_engine) -> None:
