@@ -141,6 +141,77 @@ def create_tracker(db_engine: Engine, device_id: int, bus: str | None = None) ->
         )
 
 
+def create_gps_timeline_point(
+    db_engine: Engine,
+    *,
+    point_id: int,
+    device_id: int,
+    packet_id: int,
+    navigation_time: str,
+    received_time: str,
+    latitude: float,
+    longitude: float,
+    speed: int,
+    course: int,
+) -> None:
+    with db_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO gps_timeline (
+                    id,
+                    device_id,
+                    packet_id,
+                    navigation_unix_time,
+                    navigation_time,
+                    received_unix_time,
+                    received_time,
+                    latitude,
+                    longitude,
+                    speed,
+                    pdop,
+                    hdop,
+                    vdop,
+                    nsat,
+                    ns,
+                    course,
+                    created_at
+                )
+                VALUES (
+                    :id,
+                    :device_id,
+                    :packet_id,
+                    EXTRACT(EPOCH FROM CAST(:navigation_time AS timestamptz))::bigint,
+                    CAST(:navigation_time AS timestamptz),
+                    EXTRACT(EPOCH FROM CAST(:received_time AS timestamptz))::bigint,
+                    CAST(:received_time AS timestamptz),
+                    :latitude,
+                    :longitude,
+                    :speed,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    :course,
+                    CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "id": point_id,
+                "device_id": device_id,
+                "packet_id": packet_id,
+                "navigation_time": navigation_time,
+                "received_time": received_time,
+                "latitude": latitude,
+                "longitude": longitude,
+                "speed": speed,
+                "course": course,
+            },
+        )
+
+
 def test_create_bus_and_list_buses(client: TestClient) -> None:
     create_response = create_bus(client, "BUS-001", 4)
     assert create_response.status_code == 201
@@ -224,6 +295,151 @@ def test_bind_tracker_validates_bus_and_tracker(client: TestClient, db_engine: E
 
     invalid_device_id_response = client.delete("/api/v1/trackers/0/bus", headers=AUTH_HEADERS)
     assert invalid_device_id_response.status_code == 400
+
+
+def test_get_tracker_timeline_window_returns_nearest_point_and_neighbors(
+    client: TestClient, db_engine: Engine
+) -> None:
+    create_tracker(db_engine, 1001)
+    create_gps_timeline_point(
+        db_engine,
+        point_id=1,
+        device_id=1001,
+        packet_id=101,
+        navigation_time="2026-07-02T09:58:00Z",
+        received_time="2026-07-02T09:58:02Z",
+        latitude=55.7001,
+        longitude=52.3001,
+        speed=10,
+        course=90,
+    )
+    create_gps_timeline_point(
+        db_engine,
+        point_id=2,
+        device_id=1001,
+        packet_id=102,
+        navigation_time="2026-07-02T09:59:00Z",
+        received_time="2026-07-02T09:59:02Z",
+        latitude=55.7002,
+        longitude=52.3002,
+        speed=20,
+        course=91,
+    )
+    create_gps_timeline_point(
+        db_engine,
+        point_id=3,
+        device_id=1001,
+        packet_id=103,
+        navigation_time="2026-07-02T10:00:05Z",
+        received_time="2026-07-02T10:00:06Z",
+        latitude=55.7003,
+        longitude=52.3003,
+        speed=30,
+        course=92,
+    )
+    create_gps_timeline_point(
+        db_engine,
+        point_id=4,
+        device_id=1001,
+        packet_id=104,
+        navigation_time="2026-07-02T10:01:00Z",
+        received_time="2026-07-02T10:01:01Z",
+        latitude=55.7004,
+        longitude=52.3004,
+        speed=40,
+        course=93,
+    )
+    create_gps_timeline_point(
+        db_engine,
+        point_id=5,
+        device_id=1001,
+        packet_id=105,
+        navigation_time="2026-07-02T10:02:00Z",
+        received_time="2026-07-02T10:02:01Z",
+        latitude=55.7005,
+        longitude=52.3005,
+        speed=50,
+        course=94,
+    )
+
+    response = client.get(
+        "/api/v1/trackers/1001/timeline/window",
+        params={"at": "2026-07-02T10:00:00Z"},
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "deviceId": 1001,
+        "requestedAt": "2026-07-02T10:00:00Z",
+        "nearestAt": "2026-07-02T10:00:05Z",
+        "points": [
+            {
+                "navigationTime": "2026-07-02T09:58:00Z",
+                "receivedTime": "2026-07-02T09:58:02Z",
+                "lat": 55.7001,
+                "lon": 52.3001,
+                "speed": 10,
+                "course": 90,
+                "packetId": 101,
+            },
+            {
+                "navigationTime": "2026-07-02T09:59:00Z",
+                "receivedTime": "2026-07-02T09:59:02Z",
+                "lat": 55.7002,
+                "lon": 52.3002,
+                "speed": 20,
+                "course": 91,
+                "packetId": 102,
+            },
+            {
+                "navigationTime": "2026-07-02T10:00:05Z",
+                "receivedTime": "2026-07-02T10:00:06Z",
+                "lat": 55.7003,
+                "lon": 52.3003,
+                "speed": 30,
+                "course": 92,
+                "packetId": 103,
+            },
+            {
+                "navigationTime": "2026-07-02T10:01:00Z",
+                "receivedTime": "2026-07-02T10:01:01Z",
+                "lat": 55.7004,
+                "lon": 52.3004,
+                "speed": 40,
+                "course": 93,
+                "packetId": 104,
+            },
+            {
+                "navigationTime": "2026-07-02T10:02:00Z",
+                "receivedTime": "2026-07-02T10:02:01Z",
+                "lat": 55.7005,
+                "lon": 52.3005,
+                "speed": 50,
+                "course": 94,
+                "packetId": 105,
+            },
+        ],
+    }
+
+
+def test_get_tracker_timeline_window_returns_404_for_missing_tracker_or_points(
+    client: TestClient, db_engine: Engine
+) -> None:
+    missing_tracker_response = client.get(
+        "/api/v1/trackers/9999/timeline/window",
+        params={"at": "2026-07-02T10:00:00Z"},
+        headers=AUTH_HEADERS,
+    )
+    assert missing_tracker_response.status_code == 404
+
+    create_tracker(db_engine, 1002)
+    missing_points_response = client.get(
+        "/api/v1/trackers/1002/timeline/window",
+        params={"at": "2026-07-02T10:00:00Z"},
+        headers=AUTH_HEADERS,
+    )
+    assert missing_points_response.status_code == 404
 
 
 def test_create_timeline_validations_and_errors(client: TestClient) -> None:

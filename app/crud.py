@@ -3,12 +3,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Bus, BusTracker, DeviceCurrentStatus, DeviceEvent, PassengerTimeline
+from app.models import Bus, BusTracker, DeviceCurrentStatus, DeviceEvent, GPSTimeline, PassengerTimeline
 from app.utils.iso_datetime import format_iso8601_utc_output
 
 DEFAULT_MONITORING_CAMERA_COUNT = 3
@@ -109,6 +109,62 @@ def unbind_tracker_from_bus(db: Session, device_id: int) -> BusTracker:
     db.commit()
     db.refresh(tracker)
     return tracker
+
+
+def get_tracker_timeline_window(db: Session, device_id: int, at: datetime) -> tuple[GPSTimeline, list[GPSTimeline]]:
+    get_tracker_or_404(db, device_id)
+
+    nearest_statement = (
+        select(GPSTimeline)
+        .where(GPSTimeline.device_id == device_id)
+        .order_by(
+            func.abs(func.extract("epoch", GPSTimeline.navigation_time - at)).asc(),
+            GPSTimeline.navigation_time.asc(),
+            GPSTimeline.id.asc(),
+        )
+        .limit(1)
+    )
+    nearest = db.scalar(nearest_statement)
+    if nearest is None:
+        raise NotFoundError("GPS timeline not found for this tracker.")
+
+    previous_points = list(
+        db.scalars(
+            select(GPSTimeline)
+            .where(
+                GPSTimeline.device_id == device_id,
+                or_(
+                    GPSTimeline.navigation_time < nearest.navigation_time,
+                    and_(
+                        GPSTimeline.navigation_time == nearest.navigation_time,
+                        GPSTimeline.id < nearest.id,
+                    ),
+                ),
+            )
+            .order_by(GPSTimeline.navigation_time.desc(), GPSTimeline.id.desc())
+            .limit(2)
+        )
+    )
+    next_points = list(
+        db.scalars(
+            select(GPSTimeline)
+            .where(
+                GPSTimeline.device_id == device_id,
+                or_(
+                    GPSTimeline.navigation_time > nearest.navigation_time,
+                    and_(
+                        GPSTimeline.navigation_time == nearest.navigation_time,
+                        GPSTimeline.id > nearest.id,
+                    ),
+                ),
+            )
+            .order_by(GPSTimeline.navigation_time.asc(), GPSTimeline.id.asc())
+            .limit(2)
+        )
+    )
+
+    window_points = list(reversed(previous_points)) + [nearest] + next_points
+    return nearest, window_points
 
 
 def create_bus(db: Session, bus_number: str, camera_count: int) -> Bus:

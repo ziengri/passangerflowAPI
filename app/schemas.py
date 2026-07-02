@@ -32,6 +32,27 @@ class TrackerBindingResponse(BaseModel):
     bus: str | None = None
 
 
+class TrackerTimelinePointResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    navigation_time: str = Field(alias="navigationTime")
+    received_time: str = Field(alias="receivedTime")
+    latitude: float = Field(alias="lat")
+    longitude: float = Field(alias="lon")
+    speed: int
+    course: int
+    packet_id: int = Field(alias="packetId")
+
+
+class TrackerTimelineWindowResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    device_id: int = Field(alias="deviceId")
+    requested_at: str = Field(alias="requestedAt")
+    nearest_at: str = Field(alias="nearestAt")
+    points: list[TrackerTimelinePointResponse]
+
+
 class TimelineDataResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

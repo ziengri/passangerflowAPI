@@ -78,6 +78,36 @@ class BusTracker(Base):
     bus: Mapped[Bus | None] = relationship(back_populates="trackers")
 
 
+class GPSTimeline(Base):
+    __tablename__ = "gps_timeline"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    navigation_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    device_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("bus_trackers.device_id", onupdate="CASCADE", ondelete="CASCADE"),
+        nullable=False,
+    )
+    packet_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    navigation_unix_time: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    received_unix_time: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    received_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    latitude: Mapped[float] = mapped_column(nullable=False)
+    longitude: Mapped[float] = mapped_column(nullable=False)
+    speed: Mapped[int] = mapped_column(Integer, nullable=False)
+    pdop: Mapped[int] = mapped_column(Integer, nullable=False)
+    hdop: Mapped[int] = mapped_column(Integer, nullable=False)
+    vdop: Mapped[int] = mapped_column(Integer, nullable=False)
+    nsat: Mapped[int] = mapped_column(Integer, nullable=False)
+    ns: Mapped[int] = mapped_column(Integer, nullable=False)
+    course: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+
+
 class PassengerTimeline(Base):
     __tablename__ = "passenger_timeline"
     __table_args__ = (
