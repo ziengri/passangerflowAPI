@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -39,6 +40,42 @@ class Bus(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    trackers: Mapped[list["BusTracker"]] = relationship(back_populates="bus")
+
+
+class BusTracker(Base):
+    __tablename__ = "bus_trackers"
+
+    device_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    bus_number: Mapped[str | None] = mapped_column(
+        String(64),
+        ForeignKey("buses.bus_number", onupdate="CASCADE", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+    meta_json: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.current_timestamp(),
+    )
+
+    bus: Mapped[Bus | None] = relationship(back_populates="trackers")
 
 
 class PassengerTimeline(Base):

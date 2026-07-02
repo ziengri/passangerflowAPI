@@ -21,6 +21,17 @@ class BusDeleteResponse(BaseModel):
     bus: str
 
 
+class TrackerItemResponse(BaseModel):
+    device_id: int = Field(alias="deviceId")
+    bus: str | None = None
+
+
+class TrackerBindingResponse(BaseModel):
+    status: str = "ok"
+    device_id: int = Field(alias="deviceId")
+    bus: str | None = None
+
+
 class TimelineDataResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

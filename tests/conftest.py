@@ -91,6 +91,9 @@ def client(db_engine) -> Generator[TestClient, None, None]:
                     device_current_status,
                     device_events,
                     passenger_timeline,
+                    gps_current_position,
+                    gps_timeline,
+                    bus_trackers,
                     buses
                 RESTART IDENTITY CASCADE
                 """

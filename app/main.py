@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from app.auth import verify_api_key
 from app.db import init_db
 from app.errors import AppHTTPError
-from app.routes import buses, monitoring, passengers, timeline
+from app.routes import buses, monitoring, passengers, timeline, trackers
 
 
 @asynccontextmanager
@@ -50,6 +50,7 @@ def health() -> dict[str, str]:
 
 
 app.include_router(buses.router, dependencies=[Depends(verify_api_key)])
+app.include_router(trackers.router, dependencies=[Depends(verify_api_key)])
 app.include_router(timeline.router, dependencies=[Depends(verify_api_key)])
 app.include_router(passengers.router, dependencies=[Depends(verify_api_key)])
 app.include_router(monitoring.router, dependencies=[Depends(verify_api_key)])

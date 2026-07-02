@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 AUTH_HEADERS = {"X-AUTH": "test-api-key"}
 
@@ -110,6 +112,35 @@ def build_device_event_payload(
     }
 
 
+def create_tracker(db_engine: Engine, device_id: int, bus: str | None = None) -> None:
+    with db_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO bus_trackers (
+                    device_id,
+                    bus_number,
+                    first_seen_at,
+                    last_seen_at,
+                    meta_json,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    :device_id,
+                    :bus_number,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP,
+                    '{}'::jsonb,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {"device_id": device_id, "bus_number": bus},
+        )
+
+
 def test_create_bus_and_list_buses(client: TestClient) -> None:
     create_response = create_bus(client, "BUS-001", 4)
     assert create_response.status_code == 201
@@ -130,6 +161,69 @@ def test_create_duplicate_bus_returns_409(client: TestClient) -> None:
 
     duplicate = create_bus(client, "BUS-001", 2)
     assert duplicate.status_code == 409
+
+
+def test_list_trackers_and_bind_unbind_tracker(client: TestClient, db_engine: Engine) -> None:
+    assert create_bus(client, "BUS-001", 4).status_code == 201
+    assert create_bus(client, "BUS-002", 3).status_code == 201
+    create_tracker(db_engine, 1001)
+    create_tracker(db_engine, 1002, bus="BUS-002")
+
+    list_response = client.get("/api/v1/trackers", headers=AUTH_HEADERS)
+    assert list_response.status_code == 200
+    assert list_response.json() == [
+        {"deviceId": 1001, "bus": None},
+        {"deviceId": 1002, "bus": "BUS-002"},
+    ]
+
+    bind_response = client.put(
+        "/api/v1/trackers/1001/bus",
+        data={"bus": "BUS-001"},
+        headers=AUTH_HEADERS,
+    )
+    assert bind_response.status_code == 200
+    assert bind_response.json() == {
+        "status": "ok",
+        "deviceId": 1001,
+        "bus": "BUS-001",
+    }
+
+    unbind_response = client.delete("/api/v1/trackers/1002/bus", headers=AUTH_HEADERS)
+    assert unbind_response.status_code == 200
+    assert unbind_response.json() == {
+        "status": "ok",
+        "deviceId": 1002,
+        "bus": None,
+    }
+
+    final_list_response = client.get("/api/v1/trackers", headers=AUTH_HEADERS)
+    assert final_list_response.status_code == 200
+    assert final_list_response.json() == [
+        {"deviceId": 1001, "bus": "BUS-001"},
+        {"deviceId": 1002, "bus": None},
+    ]
+
+
+def test_bind_tracker_validates_bus_and_tracker(client: TestClient, db_engine: Engine) -> None:
+    assert create_bus(client, "BUS-001", 4).status_code == 201
+    create_tracker(db_engine, 1001)
+
+    missing_tracker_response = client.put(
+        "/api/v1/trackers/9999/bus",
+        data={"bus": "BUS-001"},
+        headers=AUTH_HEADERS,
+    )
+    assert missing_tracker_response.status_code == 404
+
+    missing_bus_response = client.put(
+        "/api/v1/trackers/1001/bus",
+        data={"bus": "BUS-404"},
+        headers=AUTH_HEADERS,
+    )
+    assert missing_bus_response.status_code == 404
+
+    invalid_device_id_response = client.delete("/api/v1/trackers/0/bus", headers=AUTH_HEADERS)
+    assert invalid_device_id_response.status_code == 400
 
 
 def test_create_timeline_validations_and_errors(client: TestClient) -> None:

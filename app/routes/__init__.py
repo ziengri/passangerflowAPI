@@ -1,3 +1,3 @@
-from app.routes import buses, monitoring, passengers, timeline
+from app.routes import buses, monitoring, passengers, timeline, trackers
 
-__all__ = ["buses", "monitoring", "timeline", "passengers"]
+__all__ = ["buses", "monitoring", "timeline", "passengers", "trackers"]

@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Bus, DeviceCurrentStatus, DeviceEvent, PassengerTimeline
+from app.models import Bus, BusTracker, DeviceCurrentStatus, DeviceEvent, PassengerTimeline
 from app.utils.iso_datetime import format_iso8601_utc_output
 
 DEFAULT_MONITORING_CAMERA_COUNT = 3
@@ -43,6 +43,11 @@ def _get_bus_by_number(db: Session, bus_number: str) -> Bus | None:
     return db.scalar(statement)
 
 
+def _get_tracker_by_device_id(db: Session, device_id: int) -> BusTracker | None:
+    statement = select(BusTracker).where(BusTracker.device_id == device_id)
+    return db.scalar(statement)
+
+
 def _get_device_current_status_by_bus(db: Session, bus_number: str) -> DeviceCurrentStatus | None:
     statement = select(DeviceCurrentStatus).where(DeviceCurrentStatus.bus_number == bus_number)
     return db.scalar(statement)
@@ -70,9 +75,40 @@ def get_bus_or_404(db: Session, bus_number: str) -> Bus:
     return bus
 
 
+def get_tracker_or_404(db: Session, device_id: int) -> BusTracker:
+    if device_id <= 0:
+        raise BadRequestError("`deviceId` must be greater than 0.")
+    tracker = _get_tracker_by_device_id(db, device_id)
+    if tracker is None:
+        raise NotFoundError("Tracker not found.")
+    return tracker
+
+
 def list_buses(db: Session) -> list[Bus]:
     statement = select(Bus).order_by(Bus.bus_number.asc())
     return list(db.scalars(statement))
+
+
+def list_trackers(db: Session) -> list[BusTracker]:
+    statement = select(BusTracker).order_by(BusTracker.device_id.asc())
+    return list(db.scalars(statement))
+
+
+def bind_tracker_to_bus(db: Session, device_id: int, bus_number: str) -> BusTracker:
+    tracker = get_tracker_or_404(db, device_id)
+    bus = get_bus_or_404(db, bus_number)
+    tracker.bus_number = bus.bus_number
+    db.commit()
+    db.refresh(tracker)
+    return tracker
+
+
+def unbind_tracker_from_bus(db: Session, device_id: int) -> BusTracker:
+    tracker = get_tracker_or_404(db, device_id)
+    tracker.bus_number = None
+    db.commit()
+    db.refresh(tracker)
+    return tracker
 
 
 def create_bus(db: Session, bus_number: str, camera_count: int) -> Bus:
