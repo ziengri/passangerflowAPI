@@ -1,6 +1,6 @@
 services:
   timescaledb:
-    image: ${TIMESCALE_IMAGE:-timescale/timescaledb-ha:pg16}
+    image: ${TIMESCALE_IMAGE:-timescale/timescaledb-ha:pg16.14-ts2.27.1-all-oss}
     container_name: timescaledb
     restart: unless-stopped
     environment:

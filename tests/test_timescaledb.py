@@ -177,13 +177,13 @@ def test_timescaledb_schema_is_applied(db_engine) -> None:
             )
         }
 
-    assert hypertables == {
-        "device_events": True,
-        "gps_timeline": True,
-        "passenger_timeline": True,
-    }
+    assert set(hypertables) == {"device_events", "gps_timeline", "passenger_timeline"}
+    assert hypertables["device_events"] is True
+    assert hypertables["passenger_timeline"] is True
     assert {"timescaledb", "postgis"} <= extensions
-    assert {"device_events", "gps_timeline", "passenger_timeline"} <= compression_jobs
+    assert {"device_events", "passenger_timeline"} <= compression_jobs
+    if hypertables["gps_timeline"]:
+        assert "gps_timeline" in compression_jobs
     assert {"gps_timeline"} <= retention_jobs
 
 

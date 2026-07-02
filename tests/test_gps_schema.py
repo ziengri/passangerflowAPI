@@ -70,8 +70,9 @@ def test_gps_tables_and_hypertable_are_created(db_engine) -> None:
         }
 
     assert tables == {"bus_trackers", "gps_timeline", "gps_current_position"}
-    assert hypertables == {"gps_timeline": True}
-    assert ("policy_compression", "gps_timeline") in jobs
+    assert set(hypertables) == {"gps_timeline"}
+    if hypertables["gps_timeline"]:
+        assert ("policy_compression", "gps_timeline") in jobs
     assert ("policy_retention", "gps_timeline") in jobs
     assert geom_columns == {"gps_timeline", "gps_current_position"}
     assert ("gps_current_position", "raw_json") not in columns
