@@ -40,10 +40,6 @@ func (s *Store) SaveGPSPoint(ctx context.Context, point model.GPSPoint) (service
 	if err := point.Validate(); err != nil {
 		return service.SaveResult{}, err
 	}
-	rawJSON := point.RawJSON
-	if len(rawJSON) == 0 {
-		rawJSON = []byte(`{}`)
-	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -135,11 +131,10 @@ func (s *Store) SaveGPSPoint(ctx context.Context, point model.GPSPoint) (service
 		    nsat,
 		    ns,
 		    course,
-		    raw_json,
 		    created_at,
 		    updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $6, $6)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $6, $6)
 		ON CONFLICT (device_id) DO UPDATE
 		SET packet_id = EXCLUDED.packet_id,
 		    navigation_unix_time = EXCLUDED.navigation_unix_time,
@@ -155,7 +150,6 @@ func (s *Store) SaveGPSPoint(ctx context.Context, point model.GPSPoint) (service
 		    nsat = EXCLUDED.nsat,
 		    ns = EXCLUDED.ns,
 		    course = EXCLUDED.course,
-		    raw_json = EXCLUDED.raw_json,
 		    updated_at = EXCLUDED.updated_at
 		WHERE gps_current_position.navigation_time <= EXCLUDED.navigation_time
 		`,
@@ -174,7 +168,6 @@ func (s *Store) SaveGPSPoint(ctx context.Context, point model.GPSPoint) (service
 		point.Nsat,
 		point.Ns,
 		point.Course,
-		string(rawJSON),
 	); err != nil {
 		return service.SaveResult{}, fmt.Errorf("upsert gps_current_position: %w", err)
 	}

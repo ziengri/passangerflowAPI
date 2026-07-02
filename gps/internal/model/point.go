@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -24,7 +23,6 @@ type GPSPoint struct {
 	Nsat               int32
 	Ns                 int32
 	Course             int32
-	RawJSON            []byte
 }
 
 func NewPointFromNavRecord(record *egtsstorage.NavRecord) (GPSPoint, error) {
@@ -49,12 +47,6 @@ func NewPointFromNavRecord(record *egtsstorage.NavRecord) (GPSPoint, error) {
 		Ns:                 int32(record.Ns),
 		Course:             int32(record.Course),
 	}
-
-	raw, err := json.Marshal(record)
-	if err != nil {
-		return GPSPoint{}, fmt.Errorf("marshal raw payload: %w", err)
-	}
-	point.RawJSON = raw
 
 	if err := point.Validate(); err != nil {
 		return GPSPoint{}, err

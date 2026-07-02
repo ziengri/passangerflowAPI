@@ -55,12 +55,26 @@ def test_gps_tables_and_hypertable_are_created(db_engine) -> None:
                 )
             )
         }
+        columns = {
+            (row[0], row[1])
+            for row in connection.execute(
+                text(
+                    """
+                    SELECT table_name, column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name IN ('gps_timeline', 'gps_current_position')
+                    """
+                )
+            )
+        }
 
     assert tables == {"bus_trackers", "gps_timeline", "gps_current_position"}
     assert hypertables == {"gps_timeline": True}
     assert ("policy_compression", "gps_timeline") in jobs
     assert ("policy_retention", "gps_timeline") in jobs
     assert geom_columns == {"gps_timeline", "gps_current_position"}
+    assert ("gps_current_position", "raw_json") not in columns
 
 
 def test_gps_foreign_keys_and_indexes_exist(db_engine) -> None:

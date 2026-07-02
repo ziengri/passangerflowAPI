@@ -48,7 +48,6 @@ func TestSaveGPSPointIntegration(t *testing.T) {
 		ReceivedTime:       time.Unix(1782814577, 0).UTC(),
 		Latitude:           55.713711682640415,
 		Longitude:          52.342378295106435,
-		RawJSON:            []byte(`{"client":194918639,"packet_id":139}`),
 	}
 
 	result, err := store.SaveGPSPoint(ctx, first)

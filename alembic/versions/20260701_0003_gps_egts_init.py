@@ -115,7 +115,6 @@ def upgrade() -> None:
             nsat INTEGER NOT NULL DEFAULT 0,
             ns INTEGER NOT NULL DEFAULT 0,
             course INTEGER NOT NULL DEFAULT 0,
-            raw_json JSONB NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
         )

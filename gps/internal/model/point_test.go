@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -31,14 +30,6 @@ func TestNewPointFromNavRecordMapsClientAndTimes(t *testing.T) {
 	}
 	if point.ReceivedTime != time.Unix(1782814577, 0).UTC() {
 		t.Fatalf("unexpected received time: %s", point.ReceivedTime)
-	}
-	if len(point.RawJSON) == 0 {
-		t.Fatal("expected raw json to be populated")
-	}
-
-	var raw map[string]any
-	if err := json.Unmarshal(point.RawJSON, &raw); err != nil {
-		t.Fatalf("expected valid raw json, got error: %v", err)
 	}
 }
 
