@@ -1,8 +1,18 @@
+version: '3.8'
+
+# Шаблон ограничений для логов (максимум 3 файла по 200 Мб на сервис = 600 Мб)
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "200m"
+    max-file: "3"
+
 services:
   timescaledb:
     image: ${TIMESCALE_IMAGE:-timescale/timescaledb-ha:pg16.14-ts2.27.1-all}
     container_name: timescaledb
     restart: unless-stopped
+    logging: *default-logging
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app_db}
       POSTGRES_USER: ${POSTGRES_USER:-app_user}
@@ -34,6 +44,11 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+    logging: *default-logging
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-j0lxEv0sljXa}@timescaledb:5432/${POSTGRES_DB:-app_db}
       API_AUTH_KEY: "pcrt!af3g"
@@ -49,6 +64,7 @@ services:
     depends_on:
       timescaledb:
         condition: service_healthy
+    logging: *default-logging
     environment:
       GPS_DATABASE_DSN: postgres://${POSTGRES_USER:-app_user}:${POSTGRES_PASSWORD:-j0lxEv0sljXa}@timescaledb:5432/${POSTGRES_DB:-app_db}?sslmode=disable
       GPS_EGTS_HOST: 0.0.0.0
@@ -61,24 +77,6 @@ services:
     ports:
       - "4000:4000"
       - "8001:8001"
-
-  # demo:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.demo
-  #     args:
-  #       PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-public.ecr.aws/docker/library/python:3.12-slim}
-  #   environment:
-  #     API_URL: http://api:8000
-  #     API_AUTH_KEY: ${API_AUTH_KEY:-local-dev-key}
-  #     DEMO_BUS: BUS-DEMO
-  #     DEMO_CAM_MODE: random
-  #     DEMO_CAM: "1,2,3"
-  #     DEMO_INTERVAL_SECONDS: "120"
-  #     DEMO_BUS_CAMERA_COUNT: "4"
-  #     DEMO_TIMEOUT_SECONDS: "10"
-  #   depends_on:
-  #     - api
 
 volumes:
   timescaledb_data:
