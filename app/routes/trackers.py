@@ -22,6 +22,25 @@ def get_trackers(db: Session = Depends(get_db)) -> list[schemas.TrackerItemRespo
     ]
 
 
+@router.get("/positions", response_model=list[schemas.PositionItemResponse])
+def get_positions(db: Session = Depends(get_db)) -> list[schemas.PositionItemResponse]:
+    positions = crud.list_current_positions(db)
+    return [
+        schemas.PositionItemResponse(
+            deviceId=position.device_id,
+            bus=bus_number,
+            lat=position.latitude,
+            lon=position.longitude,
+            speed=position.speed,
+            course=position.course,
+            packetId=position.packet_id,
+            navigationTime=format_iso8601_utc_output(position.navigation_time),
+            receivedTime=format_iso8601_utc_output(position.received_time),
+        )
+        for position, bus_number in positions
+    ]
+
+
 @router.put("/trackers/{device_id}/bus", response_model=schemas.TrackerBindingResponse)
 def bind_tracker_to_bus(
     device_id: int,

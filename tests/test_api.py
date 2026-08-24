@@ -212,6 +212,75 @@ def create_gps_timeline_point(
         )
 
 
+def create_gps_current_position(
+    db_engine: Engine,
+    *,
+    device_id: int,
+    packet_id: int,
+    navigation_time: str,
+    received_time: str,
+    latitude: float,
+    longitude: float,
+    speed: int,
+    course: int,
+) -> None:
+    with db_engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                INSERT INTO gps_current_position (
+                    device_id,
+                    packet_id,
+                    navigation_unix_time,
+                    navigation_time,
+                    received_unix_time,
+                    received_time,
+                    latitude,
+                    longitude,
+                    speed,
+                    pdop,
+                    hdop,
+                    vdop,
+                    nsat,
+                    ns,
+                    course,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    :device_id,
+                    :packet_id,
+                    EXTRACT(EPOCH FROM CAST(:navigation_time AS timestamptz))::bigint,
+                    CAST(:navigation_time AS timestamptz),
+                    EXTRACT(EPOCH FROM CAST(:received_time AS timestamptz))::bigint,
+                    CAST(:received_time AS timestamptz),
+                    :latitude,
+                    :longitude,
+                    :speed,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    :course,
+                    CURRENT_TIMESTAMP,
+                    CURRENT_TIMESTAMP
+                )
+                """
+            ),
+            {
+                "device_id": device_id,
+                "packet_id": packet_id,
+                "navigation_time": navigation_time,
+                "received_time": received_time,
+                "latitude": latitude,
+                "longitude": longitude,
+                "speed": speed,
+                "course": course,
+            },
+        )
+
+
 def test_create_bus_and_list_buses(client: TestClient) -> None:
     create_response = create_bus(client, "BUS-001", 4)
     assert create_response.status_code == 201
@@ -272,6 +341,61 @@ def test_list_trackers_and_bind_unbind_tracker(client: TestClient, db_engine: En
     assert final_list_response.json() == [
         {"deviceId": 1001, "bus": "BUS-001"},
         {"deviceId": 1002, "bus": None},
+    ]
+
+
+def test_list_positions_returns_latest_point_per_tracker(client: TestClient, db_engine: Engine) -> None:
+    assert create_bus(client, "BUS-001", 4).status_code == 201
+    create_tracker(db_engine, 1001, bus="BUS-001")
+    create_tracker(db_engine, 1002)
+    create_gps_current_position(
+        db_engine,
+        device_id=1001,
+        packet_id=3887,
+        navigation_time="2026-08-21T10:31:54Z",
+        received_time="2026-08-21T10:32:03Z",
+        latitude=55.850493,
+        longitude=48.499551,
+        speed=1,
+        course=96,
+    )
+    create_gps_current_position(
+        db_engine,
+        device_id=1002,
+        packet_id=12,
+        navigation_time="2026-08-21T11:00:00Z",
+        received_time="2026-08-21T11:00:05Z",
+        latitude=55.7,
+        longitude=49.1,
+        speed=0,
+        course=0,
+    )
+
+    response = client.get("/api/v1/positions", headers=AUTH_HEADERS)
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "deviceId": 1001,
+            "bus": "BUS-001",
+            "lat": 55.850493,
+            "lon": 48.499551,
+            "speed": 1,
+            "course": 96,
+            "packetId": 3887,
+            "navigationTime": "2026-08-21T10:31:54Z",
+            "receivedTime": "2026-08-21T10:32:03Z",
+        },
+        {
+            "deviceId": 1002,
+            "bus": None,
+            "lat": 55.7,
+            "lon": 49.1,
+            "speed": 0,
+            "course": 0,
+            "packetId": 12,
+            "navigationTime": "2026-08-21T11:00:00Z",
+            "receivedTime": "2026-08-21T11:00:05Z",
+        },
     ]
 
 

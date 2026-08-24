@@ -53,6 +53,20 @@ class TrackerTimelineWindowResponse(BaseModel):
     points: list[TrackerTimelinePointResponse]
 
 
+class PositionItemResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    device_id: int = Field(alias="deviceId")
+    bus: str | None = None
+    latitude: float = Field(alias="lat")
+    longitude: float = Field(alias="lon")
+    speed: int
+    course: int
+    packet_id: int = Field(alias="packetId")
+    navigation_time: str = Field(alias="navigationTime")
+    received_time: str = Field(alias="receivedTime")
+
+
 class TimelineDataResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

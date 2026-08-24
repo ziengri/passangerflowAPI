@@ -8,7 +8,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.errors import BadRequestError, ConflictError, NotFoundError
-from app.models import Bus, BusTracker, DeviceCurrentStatus, DeviceEvent, GPSTimeline, PassengerTimeline
+from app.models import (
+    Bus,
+    BusTracker,
+    DeviceCurrentStatus,
+    DeviceEvent,
+    GPSCurrentPosition,
+    GPSTimeline,
+    PassengerTimeline,
+)
 from app.utils.iso_datetime import format_iso8601_utc_output
 
 DEFAULT_MONITORING_CAMERA_COUNT = 3
@@ -94,6 +102,15 @@ def list_trackers(db: Session) -> list[BusTracker]:
     return list(db.scalars(statement))
 
 
+def list_current_positions(db: Session) -> list[tuple[GPSCurrentPosition, str | None]]:
+    statement = (
+        select(GPSCurrentPosition, BusTracker.bus_number)
+        .join(BusTracker, BusTracker.device_id == GPSCurrentPosition.device_id)
+        .order_by(GPSCurrentPosition.device_id.asc())
+    )
+    return [(position, bus_number) for position, bus_number in db.execute(statement).all()]
+
+
 def bind_tracker_to_bus(db: Session, device_id: int, bus_number: str) -> BusTracker:
     tracker = get_tracker_or_404(db, device_id)
     bus = get_bus_or_404(db, bus_number)
@@ -114,19 +131,43 @@ def unbind_tracker_from_bus(db: Session, device_id: int) -> BusTracker:
 def get_tracker_timeline_window(db: Session, device_id: int, at: datetime) -> tuple[GPSTimeline, list[GPSTimeline]]:
     get_tracker_or_404(db, device_id)
 
-    nearest_statement = (
+    # Index-friendly nearest lookup (avoids ORDER BY abs(...) full scan per device).
+    before = db.scalar(
         select(GPSTimeline)
-        .where(GPSTimeline.device_id == device_id)
-        .order_by(
-            func.abs(func.extract("epoch", GPSTimeline.navigation_time - at)).asc(),
-            GPSTimeline.navigation_time.asc(),
-            GPSTimeline.id.asc(),
+        .where(
+            GPSTimeline.device_id == device_id,
+            GPSTimeline.navigation_time <= at,
         )
+        .order_by(GPSTimeline.navigation_time.desc(), GPSTimeline.id.desc())
         .limit(1)
     )
-    nearest = db.scalar(nearest_statement)
-    if nearest is None:
+    after = db.scalar(
+        select(GPSTimeline)
+        .where(
+            GPSTimeline.device_id == device_id,
+            GPSTimeline.navigation_time >= at,
+        )
+        .order_by(GPSTimeline.navigation_time.asc(), GPSTimeline.id.asc())
+        .limit(1)
+    )
+
+    if before is None and after is None:
         raise NotFoundError("GPS timeline not found for this tracker.")
+    if before is None:
+        nearest = after
+    elif after is None:
+        nearest = before
+    else:
+        before_delta = abs((before.navigation_time - at).total_seconds())
+        after_delta = abs((after.navigation_time - at).total_seconds())
+        if after_delta < before_delta:
+            nearest = after
+        elif after_delta > before_delta:
+            nearest = before
+        elif after.id < before.id:
+            nearest = after
+        else:
+            nearest = before
 
     previous_points = list(
         db.scalars(
